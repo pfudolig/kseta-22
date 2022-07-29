@@ -35,7 +35,7 @@ int main(int argc, char** argv)
   h_a.resize(numBlocks * numThreadsPerBlock); //host vector was empty ***set size of host vector total # of threads
 
   // Part 1 of 5: allocate host and device memory
-   size_t memSize = numBlocks * numThreadsPerBlock * sizeof(int); //also total number of threads
+  size_t memSize = numBlocks * numThreadsPerBlock * sizeof(int); //also total number of threads
   cudaMalloc(&d_a, memSize); //assign memory to the location of pointer
 
   // Part 2 of 5: configure and launch kernel
