@@ -16,18 +16,24 @@ __global__ void block_sum(const int* input, int* per_block_results,
 //  const int block_size = blockDim.x;
 
   __shared__ int sdata[num_blocks];
-  int thread = threadIdx.x;
+  //int thread = threadIdx.x;
   int global_thread = threadIdx.x + blockIdx.x * blockDim.x;
+  auto step_size = 1;
+  const auto pair = global_thread * 2;
+  const auto sum = pair + step_size;
   //sdata[global_thread] = 0;
-  if (global_thread < n) {
-    input = &sdata[global_thread];
-    __syncthreads();
-
-    //sdata[global_thread] = input[global_thread];
-    //__syncthreads();
-    //per_block_results[global_thread] += sdata[thread]; //sum threads
+  while (blockDim.x > 0) {
+    if (global_thread < n) {
+      sdata[global_thread] = input[global_thread];
+      __syncthreads();
+      sdata[pair] += sdata[sum];
+    }
+    per_block_results[global_thread] = sdata[pair];
   }
-  printf("%d\n",input);
+      //input = &sdata[global_thread];
+      //sdata[global_thread] = input[global_thread];
+      //__syncthreads();
+      //per_block_results[global_thread] += sdata[thread]; //sum threads
   
 }
 
@@ -80,72 +86,34 @@ int main(void)
   std::cerr << "Host sum: " << host_result << std::endl;
 
 
-
-
   // //Part 1 of 6: move input to device memory
   int n = num_elements * sizeof(int); //sizeof int is 4bytes
   int* d_input = 0;
   cudaMalloc((void**)&d_input,n);
   cudaMemcpy(d_input,h_input.data(),n,cudaMemcpyHostToDevice);
   int* d_partial_sums_and_total;
-  cudaMalloc(&d_partial_sums_and_total,block_size * sizeof(int));
+  cudaMalloc((void**)&d_partial_sums_and_total,block_size * sizeof(int));
   block_sum<<<num_blocks, block_size>>>(d_input, d_partial_sums_and_total,
                                         n);
   cudaDeviceSynchronize();
-
-
-
-/* 
-  std::vector<int> host(block_size);
-
-//  int i = 0; 
-//  std::fill(host.begin(),host.end(),i++);
-  cudaMemcpy(d_input,host.data(),n,cudaMemcpyHostToDevice);
-  std::cout << *d_input << std::endl;
-
-
-  // // Part 1 of 6: allocate the partial sums: How much space does it need?
-  int* d_partial_sums_and_total;
-  cudaMalloc(&d_partial_sums_and_total,n);
-  // // Part 1 of 6: launch one kernel to compute, per-block, a partial sum. How
-  // much shared memory does it need?
-  //block_sum<<<num_blocks, block_size>>>(d_input, d_partial_sums_and_total,
-//                                        n);
-
-  //std::cout << d_partial_sums_and_total << std::endl;
-  int* final;
-  cudaMalloc(&final,n);
-  cudaMemcpy(final,d_partial_sums_and_total,n,cudaMemcpyDeviceToDevice);
-  //std::cout << *final << std::endl;
-*/
-
-
-
-
-
-
-
-
-
+  cudaMemcpy(h_input.data(),d_partial_sums_and_total,n,cudaMemcpyDeviceToHost);
+  printf("%d\n",h_input.data());
 
   /*
-  //cudaDeviceSynchronize(); //Unsure yet if I need this
-
   // // // Part 1 of 6: compute the sum of the partial sums
   // int* d_final;
-  // cudaMalloc(&d_final,n);
-  // block_sum<<<dimGrid,dimBlock>>>(d_partial_sums_and_total,d_final,n);
+  // cudaMalloc((void**)&d_final,n);
+  // block_sum<<<num_blocks,block_size>>>(d_partial_sums_and_total,d_final,n);
+  //cudaDeviceSynchronize();
 
   // // // Part 1 of 6: copy the result back to the host
-  // //int* device_result = 0;
-  // //cudaMemcpy(device_result,d_final,n,cudaMemcpyDeviceToHost);
-  // std::cout << "Device sum: " << *d_final << std::endl;
+  // //cudaMemcpy(h_input,d_final,n,cudaMemcpyDeviceToHost);
+  // std::cout << "Device sum: " << h_input << std::endl;
 
   // // Part 1 of 6: deallocate device memory
   //cudaFree(d_input);
   //cudaFree(d_partial_sums_and_total);
   //cudaFree(d_final);
-  //cudaFree(device_result);
 */ 
   return 0;
 }
