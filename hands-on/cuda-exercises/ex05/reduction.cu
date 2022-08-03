@@ -13,54 +13,25 @@ const int block_size = 64;
 __global__ void block_sum(const int* input, int* per_block_results,
                           const size_t n)
 {
-//  const int block_size = blockDim.x;
-
   __shared__ int sdata[num_blocks];
   //int thread = threadIdx.x;
   int global_thread = threadIdx.x + blockIdx.x * blockDim.x;
-  auto step_size = 1;
-  const auto pair = global_thread * 2;
-  const auto sum = pair + step_size;
   //sdata[global_thread] = 0;
-  while (blockDim.x > 0) {
-    if (global_thread < n) {
-      sdata[global_thread] = input[global_thread];
-      __syncthreads();
-      sdata[pair] += sdata[sum];
-    }
-    per_block_results[global_thread] = sdata[pair];
+  if (global_thread < n) {
+    sdata[global_thread] = input[global_thread];
+    __syncthreads();
+    per_block_results[global_thread] += sdata[global_thread];
+    __syncthreads();
   }
-      //input = &sdata[global_thread];
-      //sdata[global_thread] = input[global_thread];
-      //__syncthreads();
-      //per_block_results[global_thread] += sdata[thread]; //sum threads
-  
+
 }
 
-
-/*
-//  const int block_size = blockDim.x;
-  //__shared__ int sdata[16];
-  int thread = threadIdx.x;
-  int global_thread = threadIdx.x + blockIdx.x * blockDim.x;
-  //const int total_thread = blockIdx.x * blockDim.x;
-  //int x = per_block_results[global_thread]; //sum threads
-  __shared__ int sdata[n];
-  sdata[thread] = sum;
-  __syncthreads();
-
-  printf("%d",sum);
-/*
-//  int total_threads = blockDim.x * gridDim.x;
-  sdata[thread] = input[global_thread];
-  __syncthreads();
-  int x = per_block_results[global_thread]; //sum threads
-  printf("%d",x);
-//  atomicAdd(&input,sdata[global_thread])
-//  per_block_results = &input;
-*/
-
-
+__global__ void saxpy(unsigned int n, double a, double* x, double* y)
+{
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; //global index of each thread
+  if (i < n) //if i is greater than some value
+    y[i] = a * x[i] + y[i]; //to ensure no out of bounds memory access (#threads must be divisible by #blocks)
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,8 +47,7 @@ int main(void)
 
   // create array of 256ki elements
   const int num_elements = 1 << 18;
-  // generate random input on the host
-  std::vector<int> h_input(num_elements);
+  // generate random input on the host  std::vector<int> h_input(num_elements);
   for (auto& elt : h_input) {
     elt = distrib(gen);
   }
@@ -86,34 +56,70 @@ int main(void)
   std::cerr << "Host sum: " << host_result << std::endl;
 
 
-  // //Part 1 of 6: move input to device memory
+
+
+
   int n = num_elements * sizeof(int); //sizeof int is 4bytes
   int* d_input = 0;
   cudaMalloc((void**)&d_input,n);
-  cudaMemcpy(d_input,h_input.data(),n,cudaMemcpyHostToDevice);
+  
   int* d_partial_sums_and_total;
-  cudaMalloc((void**)&d_partial_sums_and_total,block_size * sizeof(int));
+  cudaMalloc((void**)&d_partial_sums_and_total,block_size * sizeof(int)); //was block_size but idk
+
+  int* d_final;
+  cudaMalloc((void**)&d_final,0);
+
+  cudaEvent_t start,stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  cudaMemcpy(d_input,h_input.data(),n,cudaMemcpyHostToDevice);
+
+  cudaEventRecord(start);
+
   block_sum<<<num_blocks, block_size>>>(d_input, d_partial_sums_and_total,
                                         n);
   cudaDeviceSynchronize();
-  cudaMemcpy(h_input.data(),d_partial_sums_and_total,n,cudaMemcpyDeviceToHost);
-  printf("%d\n",h_input.data());
+  cudaEventRecord(stop);
+  cudaEventSynchronize(stop);
+  //cudaMemcpy(h_input.data(),d_partial_sums_and_total,n,cudaMemcpyDeviceToHost);
 
-  /*
-  // // // Part 1 of 6: compute the sum of the partial sums
-  // int* d_final;
-  // cudaMalloc((void**)&d_final,n);
-  // block_sum<<<num_blocks,block_size>>>(d_partial_sums_and_total,d_final,n);
-  //cudaDeviceSynchronize();
+/* Checking vectors
+  for (int i=0; i<h_input.size();i++) {
+    printf("%d\n",h_input[i]);
+  }
+  printf("%d\n",h_input.size());
+  printf("%d\n",h_input.begin());
+  printf("%d\n",h_input.end());
+  //std::cout << *h_input.data() << std::endl;
+*/
 
-  // // // Part 1 of 6: copy the result back to the host
-  // //cudaMemcpy(h_input,d_final,n,cudaMemcpyDeviceToHost);
-  // std::cout << "Device sum: " << h_input << std::endl;
+  block_sum<<<1,num_blocks>>>(d_partial_sums_and_total,d_final,block_size*sizeof(int));
+  cudaDeviceSynchronize();
+  h_input.resize(0);
+  cudaMemcpy(h_input.data(),d_final,0,cudaMemcpyDeviceToHost);
 
-  // // Part 1 of 6: deallocate device memory
-  //cudaFree(d_input);
-  //cudaFree(d_partial_sums_and_total);
-  //cudaFree(d_final);
-*/ 
+  printf("%d\n",h_input.size());
+  printf("%d\n",h_input.begin());
+  printf("%d\n",h_input.end());
+  //std::cout << "Device sum: " << h_input << std::endl;
+
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop); //write recorded time to milliseconds variable 
+
+  double maxError = 0.; //just error check
+  for (unsigned int i = 0; i < N; i++) {
+    maxError = max(maxError, abs(y[i] - 4.0));
+
+  }
+  float thruput = 3 * N * sizeof(double) / milliseconds / 10e6;
+  std::cout << "throughput: " << thruput << std::endl;
+
+
+  cudaFree(d_input);
+  cudaFree(d_partial_sums_and_total);
+  cudaFree(d_final);
+
+
   return 0;
 }
