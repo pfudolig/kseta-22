@@ -3,10 +3,11 @@
 #include <random>
 #include <vector>
 
+
 // Here you can set the device ID that was assigned to you
 #define MYDEVICE 1
-const int num_blocks = 256; //4096
-const int block_size = 64; //64
+const int num_blocks = 4; //4096
+const int block_size = 8; //64
 
 // Part 1 of 6: implement the kernel
 __global__ void block_sum(const int* input, int* per_block_results, const size_t n)
@@ -28,8 +29,8 @@ __global__ void block_sum(const int* input, int* per_block_results, const size_t
       //printf("mid");
     }
     __syncthreads();
-      //printf("%d\n",sdata[threadIdx.x]);
-      //printf("mid");
+    //printf("%d\n",sdata[threadIdx.x]);
+    //printf("mid");
     s = s/2;
   }
     //printf("whiledone");
@@ -39,15 +40,14 @@ __global__ void block_sum(const int* input, int* per_block_results, const size_t
       //printf("%d\n",per_block_results[blockIdx.x]);
       //printf("%d\n",blockIdx.x); {
     per_block_results[blockIdx.x] = sdata[0]; //save just the first element of our sdata array
-    //printf("savedone");
-    //printf("%d\n",per_block_results[blockIdx.x]); //here prints just two we need, good
+    printf("savedone");
+    printf("%d\n",per_block_results[blockIdx.x]); //here prints just two we need, good
   }
       //if (blockIdx.x > num_blocks) and if (per_block_results[blockIdx.x == 0]) { 
         //__syncthreads();
   //per_block_results[blockIdx.x] = per_block_results[num_blocks];
     //want to save sum to just one thread element in perblocks array, not every thread element
-  
-  //printf("sumdone");
+  //printf("final");
   //printf("%d\n",per_block_results[blockIdx.x]); //here prints as a block of 1st and a block of 2nd
 }
 
@@ -71,7 +71,7 @@ int main(void)
   std::uniform_int_distribution<> distrib(-10, 10); //produces random integer from -10 to 10
 
   // create array of 256ki elements
-  const int num_elements = 1 << 14; //18
+  const int num_elements = 1 << 5; //18
   // generate random input on the host  
   std::vector<int> h_input(num_elements);
   for (auto& elt : h_input) {
@@ -88,10 +88,7 @@ int main(void)
   int n = num_elements * sizeof(int); //sizeof int is 4bytes
   int* d_input = 0;
   cudaMalloc((void**)&d_input,n);
-  
-  int* d_partial_sums_and_total;
-  cudaMalloc((void**)&d_partial_sums_and_total,num_blocks * sizeof(int)); //make num_blocks?
-
+ 
   int* d_final;
   cudaMalloc((void**)&d_final,sizeof(int));
 
@@ -105,11 +102,12 @@ int main(void)
 
   cudaEventRecord(start);
 
-  block_sum<<<num_blocks, block_size>>>(d_input, d_partial_sums_and_total,n);
+  block_sum<<<num_blocks, block_size>>>(d_input, d_final,n);
   cudaDeviceSynchronize();
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
-  cudaMemcpy(d_final,d_partial_sums_and_total,num_blocks,cudaMemcpyDeviceToDevice);
+  cudaMemcpy(host.data(),d_final,sizeof(int),cudaMemcpyDeviceToHost);
+  std::cout << "Device sum: " << *host.data() << std::endl;
   //printf("Device sum: ");
   //printf("%d\n",host.data());
  //Checking vectors
@@ -122,12 +120,6 @@ int main(void)
   //std::cout << *h_input.data() << std::endl;
 
 
-  block_sum<<<1,num_blocks>>>(d_partial_sums_and_total,d_final,block_size*sizeof(int));
-  cudaDeviceSynchronize();
-  cudaMemcpy(host.data(),d_final,sizeof(int),cudaMemcpyDeviceToHost);
-  std::cout << "Device sum: " << *host.data() << std::endl;
-
-
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop); //write recorded time to milliseconds variable 
 
@@ -136,7 +128,6 @@ int main(void)
 
 
   cudaFree(d_input);
-  cudaFree(d_partial_sums_and_total);
   cudaFree(d_final);
 
   return 0;
