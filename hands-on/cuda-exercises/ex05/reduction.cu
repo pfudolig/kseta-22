@@ -42,22 +42,7 @@ __global__ void block_sum(const int* input, int* per_block_results, const size_t
     //printf("savedone");
     //printf("%d\n",per_block_results[blockIdx.x]); //here prints just two we need, good
   }
-      //if (blockIdx.x > num_blocks) and if (per_block_results[blockIdx.x == 0]) { 
-        //__syncthreads();
-  //per_block_results[blockIdx.x] = per_block_results[num_blocks];
-    //want to save sum to just one thread element in perblocks array, not every thread element
-  
-  //printf("sumdone");
-  //printf("%d\n",per_block_results[blockIdx.x]); //here prints as a block of 1st and a block of 2nd
 }
-
-__global__ void saxpy(unsigned int n, double a, double* x, double* y)
-{
-  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; //global index of each thread
-  if (i < n) //if i is greater than some value
-    y[i] = a * x[i] + y[i]; //to ensure no out of bounds memory access (#threads must be divisible by #blocks)
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
@@ -110,16 +95,6 @@ int main(void)
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaMemcpy(d_final,d_partial_sums_and_total,num_blocks,cudaMemcpyDeviceToDevice);
-  //printf("Device sum: ");
-  //printf("%d\n",host.data());
- //Checking vectors
- // for (int i=0; i<h_input.size();i++) {
-  //  printf("%d\n",h_input[i]);
-  //}
-  //printf("%d\n",host.size()); //size is num elems when launch w/ n but should be num_blocks
-  //printf("%d\n",host.begin());
-  //printf("%d\n",host.end());
-  //std::cout << *h_input.data() << std::endl;
 
 
   block_sum<<<1,num_blocks>>>(d_partial_sums_and_total,d_final,block_size*sizeof(int));
